@@ -29,6 +29,100 @@ class RateLimitError(Exception):
 class SpotifyService:
     """Spotify client wrapper with caching and validation."""
 
+    # Fallback genres from Spotify seed list (static) used if API fetch fails.
+    FALLBACK_GENRES: List[str] = [
+        "acoustic",
+        "afrobeat",
+        "alt-rock",
+        "alternative",
+        "ambient",
+        "anime",
+        "bluegrass",
+        "blues",
+        "bossanova",
+        "brazil",
+        "breakbeat",
+        "british",
+        "cantopop",
+        "chill",
+        "classical",
+        "club",
+        "country",
+        "dance",
+        "dancehall",
+        "death-metal",
+        "deep-house",
+        "disco",
+        "drum-and-bass",
+        "dub",
+        "electronic",
+        "emo",
+        "folk",
+        "french",
+        "funk",
+        "garage",
+        "german",
+        "gospel",
+        "goth",
+        "grunge",
+        "happy",
+        "hard-rock",
+        "hardcore",
+        "heavy-metal",
+        "hip-hop",
+        "holidays",
+        "house",
+        "indian",
+        "indie",
+        "indie-pop",
+        "industrial",
+        "j-pop",
+        "j-rock",
+        "jazz",
+        "k-pop",
+        "latin",
+        "metal",
+        "metalcore",
+        "movies",
+        "opera",
+        "party",
+        "piano",
+        "pop",
+        "power-pop",
+        "progressive-house",
+        "psych-rock",
+        "punk",
+        "punk-rock",
+        "r-n-b",
+        "reggae",
+        "reggaeton",
+        "road-trip",
+        "rock",
+        "rock-n-roll",
+        "rockabilly",
+        "romance",
+        "sad",
+        "salsa",
+        "samba",
+        "sertanejo",
+        "show-tunes",
+        "singer-songwriter",
+        "ska",
+        "sleep",
+        "soul",
+        "soundtracks",
+        "spanish",
+        "study",
+        "summer",
+        "synth-pop",
+        "tango",
+        "techno",
+        "trance",
+        "trip-hop",
+        "work-out",
+        "world-music",
+    ]
+
     def __init__(self, config: Settings, logger: logging.Logger | None = None) -> None:
         self._config = config
         self._logger = logger or logging.getLogger(__name__)
@@ -59,46 +153,76 @@ class SpotifyService:
             self._logger.error("Spotify authentication failed: %s", exc)
             raise SpotifyAuthError("Failed to authenticate with Spotify") from exc
 
+    def get_available_genres(self) -> List[str]:
+        """Return Spotify seed genres; fallback to static list on failure."""
+        cache_key = "available_genres"
+        cached = self._genre_cache.get(cache_key)
+        if cached and time.time() - cached["timestamp"] < self._config.genre_cache_ttl:
+            return cached["data"]  # type: ignore[return-value]
+
+        try:
+            genres = self._fetch_genres_with_retry()
+            self._genre_cache[cache_key] = {"data": genres, "timestamp": time.time()}
+            self._logger.info("Fetched %d genres from Spotify", len(genres))
+            return genres
+        except SpotifyException as exc:
+            self._logger.warning(
+                "Failed to fetch genres from Spotify (%s). Using static fallback list.",
+                exc,
+            )
+            return self.FALLBACK_GENRES
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type(SpotifyException),
         reraise=True,
     )
-    def get_available_genres(self) -> List[str]:
-        """Return cached Spotify seed genres."""
-        cache_key = "available_genres"
-        cached = self._genre_cache.get(cache_key)
-        if cached and time.time() - cached["timestamp"] < self._config.genre_cache_ttl:
-            return cached["data"]  # type: ignore[return-value]
-
-        genres = self.client.recommendation_genre_seeds()["genres"]
-        self._genre_cache[cache_key] = {"data": genres, "timestamp": time.time()}
-        self._logger.info("Fetched %d genres from Spotify", len(genres))
-        return genres
+    def _fetch_genres_with_retry(self) -> List[str]:
+        """Internal helper to fetch genres with retry logic."""
+        return self.client.recommendation_genre_seeds()["genres"]
 
     def recommend_tracks(self, params: SpotifyAudioParams, limit: int = 20) -> List[SpotifyTrack]:
-        """Get track recommendations using clamped parameters."""
-        clamped = {
-            "target_valence": max(0.0, min(1.0, params.target_valence)),
-            "target_energy": max(0.0, min(1.0, params.target_energy)),
-            "target_danceability": max(0.0, min(1.0, params.target_danceability)),
-            "min_tempo": max(40, min(220, params.min_tempo)),
-            "max_tempo": max(40, min(220, params.max_tempo)),
-            "seed_genres": params.seed_genres[:2],
-            "limit": limit,
-        }
+        """Get track recommendations using Spotify Search API."""
+        self._logger.info(f"Finding tracks via search for genres: {params.seed_genres}")
+        tracks = []
+        seen_ids = set()
 
-        try:
-            results = self.client.recommendations(**clamped)
-            tracks = [self._normalize_track(track) for track in results.get("tracks", [])]
-            if not tracks:
-                raise NoRecommendationsError("Spotify returned no recommendations for this vibe")
-            return tracks
-        except SpotifyException as exc:
-            if exc.http_status == 429:
-                raise RateLimitError("Spotify rate limit hit, please retry shortly") from exc
-            raise
+        # Build search queries from genres
+        search_queries = [f"genre:{genre}" for genre in params.seed_genres[:3]]
+
+        # Add mood-based keywords based on valence and energy
+        if params.target_valence > 0.7:
+            search_queries.append("happy OR upbeat OR joyful")
+        elif params.target_valence < 0.3:
+            search_queries.append("sad OR melancholy OR dark")
+
+        if params.target_energy > 0.7:
+            search_queries.append("energetic OR intense")
+        elif params.target_energy < 0.3:
+            search_queries.append("calm OR chill OR ambient")
+
+        # Search with each query
+        for query in search_queries[:2]:  # Limit to avoid too many API calls
+            try:
+                results = self.client.search(q=query, type="track", limit=min(50, limit * 3))
+                for item in results.get("tracks", {}).get("items", []):
+                    if item["id"] not in seen_ids and len(tracks) < limit:
+                        tracks.append(self._normalize_track(item))
+                        seen_ids.add(item["id"])
+
+                    if len(tracks) >= limit:
+                        break
+
+            except SpotifyException as exc:
+                self._logger.warning(f"Search query '{query}' failed: {exc}")
+                continue
+
+        if not tracks:
+            raise NoRecommendationsError("No tracks found matching your vibe")
+
+        self._logger.info(f"Found {len(tracks)} tracks")
+        return tracks[:limit]
 
     def create_playlist(self, name: str, tracks: List[SpotifyTrack]) -> PlaylistResult:
         """Create a playlist and add tracks in batches."""

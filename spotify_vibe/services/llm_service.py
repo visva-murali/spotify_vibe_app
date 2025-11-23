@@ -56,7 +56,17 @@ Rules:
 - Energy: 0=calm/ambient, 1=intense/aggressive
 - Danceability: 0=listening music, 1=club bangers
 - Tempo guidance: slow=60-90 BPM, medium=90-120, fast=120-180
-- Respond with valid JSON only, matching the schema.
+- Output JSON with exactly these top-level keys (no nesting):
+  {{
+    "target_valence": float between 0 and 1,
+    "target_energy": float between 0 and 1,
+    "target_danceability": float between 0 and 1,
+    "min_tempo": integer between 40 and 220,
+    "max_tempo": integer between 40 and 220,
+    "seed_genres": ["genre1","genre2"],
+    "reasoning": "short sentence"
+  }}
+- Do not add extra keys. Do not nest fields. Return valid JSON only.
 """
 
         try:
@@ -71,6 +81,7 @@ Rules:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": vibe_prompt},
                     ],
+                    temperature=0.2,
                 )
                 content = groq_resp.choices[0].message.content
                 response = SpotifyAudioParams.model_validate_json(
@@ -84,7 +95,7 @@ Rules:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": vibe_prompt},
                     ],
-                    options={"temperature": 0.4},
+                    options={"temperature": 0.2},
                 )
                 content = result["message"]["content"]
                 response = SpotifyAudioParams.model_validate_json(

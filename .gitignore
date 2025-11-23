@@ -52,10 +52,12 @@ htmlcov/
 
 # Logs
 *.log
+logs/
 
 # Spotify cache
 .cache
-.spotify_cache/
+.spotify_cache
+
 
 # Local cache
 genre_cache.json
