@@ -115,3 +115,54 @@ Rules:
         except Exception as exc:  # pragma: no cover - handled at caller
             self._logger.error("LLM interpretation failed: %s", exc)
             raise LLMInterpretationError("Failed to interpret vibe, please try rephrasing.") from exc
+
+    def generate_playlist_name(self, vibe_prompt: str) -> str:
+        """Generate a short, catchy playlist name (max 4 words)."""
+        system_prompt = """
+You are a creative playlist naming expert.
+Generate a short, catchy playlist name based on the user's vibe.
+Rules:
+- Maximum 4 words
+- Capture the essence of the vibe
+- Be creative and memorable
+- No quotes, just the name
+"""
+
+        try:
+            if self._config.llm_provider == "groq":
+                response = self._client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Vibe: {vibe_prompt}"}
+                    ],
+                    temperature=0.7,
+                    max_tokens=20,
+                )
+                name = response.choices[0].message.content.strip()
+            else:
+                result = self._client.chat(
+                    model=self._config.ollama_model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Vibe: {vibe_prompt}"}
+                    ],
+                    options={"temperature": 0.7},
+                )
+                name = result["message"]["content"].strip()
+
+            # Remove quotes if present
+            name = name.strip('"\'')
+
+            # Truncate to 4 words max
+            words = name.split()
+            if len(words) > 4:
+                name = " ".join(words[:4])
+
+            self._logger.info(f"Generated playlist name: {name}")
+            return name
+
+        except Exception as exc:
+            self._logger.warning(f"Playlist name generation failed: {exc}")
+            # Fallback to simple truncation
+            return vibe_prompt[:40]
