@@ -5,13 +5,12 @@ import random
 import time
 from typing import List
 
-import instructor
 from groq import Groq
-from openai import OpenAI
+import ollama
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from vibe_coder.config import Settings
-from vibe_coder.models import SpotifyAudioParams
+from spotify_vibe.config import Settings
+from spotify_vibe.models import SpotifyAudioParams
 
 
 class LLMInterpretationError(Exception):
@@ -32,14 +31,11 @@ class LLMService:
         if self._config.llm_provider == "groq":
             if not self._config.groq_api_key:
                 raise ValueError("GROQ_API_KEY required for Groq provider")
-            return instructor.from_groq(Groq(api_key=self._config.groq_api_key))
+            return Groq(api_key=self._config.groq_api_key)
 
         if self._config.llm_provider == "ollama":
-            client = OpenAI(
-                base_url=f"{self._config.ollama_base_url}/v1",
-                api_key="ollama",  # dummy key for Ollama
-            )
-            return instructor.from_openai(client, mode=instructor.Mode.JSON)
+            # ollama client used directly (no Instructor)
+            return ollama.Client(host=self._config.ollama_base_url)
 
         raise ValueError(f"Unsupported LLM provider: {self._config.llm_provider}")
 
@@ -63,20 +59,37 @@ Rules:
 - Respond with valid JSON only, matching the schema.
 """
 
-        model_name = "llama-3.1-8b-instant" if self._config.llm_provider == "groq" else self._config.ollama_model
-
         try:
             start = time.time()
-            response = self._client.chat.completions.create(
-                model=model_name,
-                response_model=SpotifyAudioParams,
-                validation_context={"valid_genres": valid_genres},
-                max_retries=self._config.max_retries,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": vibe_prompt},
-                ],
-            )
+
+            if self._config.llm_provider == "groq":
+                model_name = "llama-3.1-8b-instant"
+                groq_resp = self._client.chat.completions.create(
+                    model=model_name,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": vibe_prompt},
+                    ],
+                )
+                content = groq_resp.choices[0].message.content
+                response = SpotifyAudioParams.model_validate_json(
+                    content, context={"valid_genres": valid_genres}
+                )
+            else:
+                model_name = self._config.ollama_model
+                result = self._client.chat(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": vibe_prompt},
+                    ],
+                    options={"temperature": 0.4},
+                )
+                content = result["message"]["content"]
+                response = SpotifyAudioParams.model_validate_json(
+                    content, context={"valid_genres": valid_genres}
+                )
 
             latency_ms = int((time.time() - start) * 1000)
             self._logger.info(

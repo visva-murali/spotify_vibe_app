@@ -6,5 +6,5 @@ def sanitize_playlist_name(name: str) -> str:
     cleaned = re.sub(r"[^\w\s-]", "", name)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if not cleaned:
-        cleaned = "Vibe Coder Playlist"
+        cleaned = "Spotify Vibe Playlist"
     return cleaned[:100]

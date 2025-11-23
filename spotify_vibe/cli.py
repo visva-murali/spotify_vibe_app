@@ -7,16 +7,16 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from vibe_coder.config import get_settings
-from vibe_coder.models import VibeRequest
-from vibe_coder.services.llm_service import LLMInterpretationError, LLMService
-from vibe_coder.services.spotify_service import (
+from spotify_vibe.config import get_settings
+from spotify_vibe.models import VibeRequest
+from spotify_vibe.services.llm_service import LLMInterpretationError, LLMService
+from spotify_vibe.services.spotify_service import (
     NoRecommendationsError,
     RateLimitError,
     SpotifyAuthError,
     SpotifyService,
 )
-from vibe_coder.utils.logging_config import setup_logging
+from spotify_vibe.utils.logging_config import setup_logging
 
 app = typer.Typer(add_completion=False, help="AI-powered Spotify playlist generator.")
 console = Console()
@@ -63,8 +63,8 @@ def create_playlist(
         raise typer.Exit(code=1)
 
     settings = get_settings()
-    spotify = SpotifyService(settings, logging.getLogger("vibe_coder.spotify"))
-    llm = LLMService(settings, logging.getLogger("vibe_coder.llm"))
+    spotify = SpotifyService(settings, logging.getLogger("spotify_vibe.spotify"))
+    llm = LLMService(settings, logging.getLogger("spotify_vibe.llm"))
 
     with Progress(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True

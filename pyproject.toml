@@ -25,7 +25,7 @@ dev = [
 ]
 
 [project.scripts]
-vibe-coder = "vibe_coder.cli:app"
+spotify-vibe = "spotify_vibe.cli:app"
 
 [tool.black]
 line-length = 100
@@ -36,7 +36,7 @@ line-length = 100
 extend-select = ["I"]
 fix = true
 target-version = "py311"
-src = ["vibe_coder"]
+src = ["spotify_vibe"]
 exclude = [".venv", "venv", ".git", ".pytest_cache", "build", "dist"]
 
 [tool.mypy]
@@ -52,4 +52,4 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-ra", "-q", "--cov=vibe_coder", "--cov-report=term-missing"]
+addopts = ["-ra", "-q", "--cov=spotify_vibe", "--cov-report=term-missing"]

@@ -1,4 +1,4 @@
-# Vibe Coder 🎵
+# Spotify Vibe 🎵
 
 AI-powered Spotify playlist generator using free/open-source LLMs (Groq or Ollama) plus Spotify recommendations.
 
@@ -14,7 +14,7 @@ cp .env.example .env
 ```
 3) Run the CLI (prompts for vibe):
 ```bash
-python -m vibe_coder.cli create --vibe "coding at 2am, cyberpunk vibes"
+python -m spotify_vibe.cli create --vibe "coding at 2am, cyberpunk vibes"
 ```
 
 ## Required credentials
@@ -26,13 +26,13 @@ python -m vibe_coder.cli create --vibe "coding at 2am, cyberpunk vibes"
 - Structured LLM output enforced via Pydantic + Instructor.
 - Spotify genre caching to reduce API load.
 - Rich/Typer CLI with spinners, tables, and dry-run mode.
-- Logging to console and `vibe_coder.log` (JSON format file).
+- Logging to console and `spotify_vibe.log` (JSON format file).
 
 ## Useful commands
 - Lint: `ruff check .`
 - Format: `black .`
 - Tests: `pytest`
-- Run CLI: `vibe-coder --help`
+- Run CLI: `spotify-vibe --help`
 
 ## Notes
 - Delete `.spotify_cache` if you need to re-auth Spotify.

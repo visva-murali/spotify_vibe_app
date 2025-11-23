@@ -1,1 +1,1 @@
-"""Test suite for Vibe Coder."""
+"""Test suite for Spotify Vibe."""
